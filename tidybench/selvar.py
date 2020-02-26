@@ -4,7 +4,7 @@ Implements the SELVAR (Selective auto-regressive model) algorithm.
 Based on an implementation that is originally due to Gherardo Varando
 (gherardovarando).
 """
-
+from scipy.stats import chi2
 from .utils import common_pre_post_processing
 ###
 # compile selvarF.f with:
@@ -59,6 +59,11 @@ def selvar(data,
     ----------
     scores : ndarray
         Array with scores for each link i -> j
+    pvalues : ndarray
+        Array with naively adjuste p-values of likelihood-ratio test,
+        should not be used for testing presence of edges
+    lags : ndarray
+        Array with estimated positive lags, 0 if no link
     """
 
     if slvar is None:
@@ -66,5 +71,11 @@ def selvar(data,
 
     scores, lags, info = slvar(data, bs=int(batchsize), ml=int(maxlags),
                                mxitr=int(mxitr), trc=int(trace))
+    stat, df = gtstat(data, a=lags, bs=int(batchsize),
+                      ml=int(maxlags), job="LR")
 
-    return scores
+    pvalues = 1 - chi2.cdf(stat, df[:, 0] - df[:, 1])
+    pvalues = pvalues * (data.shape[1] - 1) * data.shape[1]
+    pvalues[pvalues > 1] = 1
+
+    return scores, pvalues, lags
